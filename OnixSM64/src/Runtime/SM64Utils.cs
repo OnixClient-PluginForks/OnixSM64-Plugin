@@ -1,6 +1,8 @@
 using System.Numerics;
 using OnixRuntime.Api;
 using OnixRuntime.Api.Maths;
+using OnixRuntime.Api.NBT;
+using OnixRuntime.Api.World;
 using OnixSM64.Misc;
 
 namespace OnixSM64.Runtime;
@@ -8,6 +10,8 @@ namespace OnixSM64.Runtime;
 public static class SM64Utils {
 	public static Vec3 ConvertToSM64(Vec3 v) => v * Constants.SCALE_FACTOR;
 	public static Vec3 ConvertFromSM64(Vec3 v) => v / Constants.SCALE_FACTOR;
+
+	public static int[] StairDirectionLookup = [3, 1, 2, 0];
 	
 	public static WorldSnapshot CaptureWorldSnapshot(Vec3 marioWorldPos, Vector3 worldOffset) {
 		BoundingBox[] collisions = GetCollisionsAroundPoint(marioWorldPos, 3);
@@ -16,6 +20,7 @@ public static class SM64Utils {
 
 		return new WorldSnapshot {
 			NearbyCollisions = collisions,
+			StairBlocks = GetStairsAroundPoint(marioWorldPos, 3),
 			StandingBlockName = standingBlockName,
 			WaterLevel = waterLevel,
 			IsValid = true
@@ -25,6 +30,32 @@ public static class SM64Utils {
 	private static BoundingBox[] GetCollisionsAroundPoint(Vec3 pos, int range) {
 		Vec3 r = Vec3.One * range;
 		return Onix.Region!.GetCollisions(new BoundingBox(pos - r, pos + r));
+	}
+
+	private static StairBlock[] GetStairsAroundPoint(Vec3 pos, int range) {
+		List<StairBlock> stairs = [];
+		
+		for (int x = (int)pos.X - range; x <= (int)pos.X + range; x++) {
+			for (int y = (int)pos.Y - range; y <= (int)pos.Y + range; y++) {
+				for (int z = (int)pos.Z - range; z <= (int)pos.Z + range; z++) {
+					Block block = Onix.Region!.GetBlock(x, y, z);
+					
+					if (!block.Name.Contains("stair")) continue;
+
+					Dictionary<string, NbtTag> states = block.State.Value;
+					states.TryGetValue("states", out NbtTag? tag);
+					((ObjectTag)tag!).Value.TryGetValue("weirdo_direction", out NbtTag? value);
+					IntTag direction = (IntTag)value!;
+					
+					stairs.Add(new StairBlock {
+						Position = new BlockPos(x, y, z),
+						Rotation = StairDirectionLookup[direction.Value]
+					});
+				}
+			}
+		}
+
+		return stairs.ToArray();
 	}
 
 	private static int ComputeWaterLevel(Vec3 marioWorldPos, string standingBlockName, Vector3 worldOffset) {

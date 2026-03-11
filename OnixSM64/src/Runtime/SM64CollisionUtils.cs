@@ -88,6 +88,62 @@ public static class SM64CollisionUtils {
 		AddQuadSafe(builder, p100, p110, p111, p101, surfaceType, terrainType);
 	}
 
+	public static void AddWedgeSafe(
+		ISm64StaticCollisionMeshBuilder builder,
+		Vector3 center,
+		Vector3 size,
+		int rotation = 0,
+		Sm64SurfaceType surfaceType = Sm64SurfaceType.SURFACE_DEFAULT,
+		Sm64TerrainType terrainType = Sm64TerrainType.TERRAIN_GRASS
+	) {
+		if (Math.Abs(size.Y) < MIN_HEIGHT) size.Y = MIN_HEIGHT;
+
+		Vector3 half = size / 2f;
+
+		Vector3 bbl = new(-half.X, -half.Y, -half.Z); // bottom-back-left
+		Vector3 bbr = new(+half.X, -half.Y, -half.Z); // bottom-back-right
+		Vector3 bfl = new(-half.X, -half.Y, +half.Z); // bottom-front-left
+		Vector3 bfr = new(+half.X, -half.Y, +half.Z); // bottom-front-right
+		Vector3 btl = new(-half.X, +half.Y, -half.Z); // back-top-left
+		Vector3 btr = new(+half.X, +half.Y, -half.Z); // back-top-right
+		
+		rotation = ((rotation % 4) + 4) % 4;
+
+		if (rotation != 0) {
+			float sin = rotation switch { 1 => 1f, 2 => 0f, 3 => -1f, _ => 0f };
+			float cos = rotation switch { 1 => 0f, 2 => -1f, 3 => 0f, _ => 1f };
+
+			bbl = RotateY(bbl, sin, cos);
+			bbr = RotateY(bbr, sin, cos);
+			bfl = RotateY(bfl, sin, cos);
+			bfr = RotateY(bfr, sin, cos);
+			btl = RotateY(btl, sin, cos);
+			btr = RotateY(btr, sin, cos);
+		}
+		
+		bbl += center; bbr += center;
+		bfl += center; bfr += center;
+		btl += center; btr += center;
+		
+		AddQuadSafe(builder, bfl, bbl, bbr, bfr, surfaceType, terrainType);
+		
+		AddQuadSafe(builder, bbl, bbr, btr, btl, surfaceType, terrainType);
+		
+		AddQuadSafe(builder, btl, bfl, bfr, btr, surfaceType, terrainType);
+		
+		AddTriangleSafe(builder, bfl, bbl, btl, surfaceType, terrainType);
+		
+		AddTriangleSafe(builder, bbr, bfr, btr, surfaceType, terrainType);
+	}
+
+	private static Vector3 RotateY(Vector3 v, float sin, float cos) {
+		return new Vector3(
+			v.X * cos + v.Z * sin,
+			v.Y,
+			-v.X * sin + v.Z * cos
+		);
+	}
+
 	public static void AddFloorSafe(
 		ISm64StaticCollisionMeshBuilder builder,
 		Vector3 center,

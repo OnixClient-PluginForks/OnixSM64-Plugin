@@ -92,13 +92,6 @@ public sealed class SM64World(OnixSM64Config pluginConfig) : IDisposable {
 
 	public void OnSessionJoined() {
 		if (!Loaded || !EnabledFromPlugin) return;
-
-		if (Onix.LocalPlayer!.PermissionLevel != PlayerPermissionLevel.Operator) {
-			EnabledFromPlugin = false;
-			Disable();
-			throw new Exception("You must be Operator to use this plugin!");
-		}
-		
 		Enabled = true;
 
 		lock (_simLock) {
@@ -118,6 +111,8 @@ public sealed class SM64World(OnixSM64Config pluginConfig) : IDisposable {
 		long prevTicks = Stopwatch.GetTimestamp();
 		
 		while (!Disposed) {
+			if (!Enabled) continue;
+			
 			long nowTicks = Stopwatch.GetTimestamp();
 			double elapsed = (double)(nowTicks - prevTicks) / Stopwatch.Frequency;
 			
@@ -206,6 +201,7 @@ public sealed class SM64World(OnixSM64Config pluginConfig) : IDisposable {
 	}
 
 	private void ApplyReset() {
+		Mario!.Action = MarioAction.ACT_IDLE;
 		Mario!.Health = 2176;
 		_worldOffset = _pendingResetWorldOffset;
 		Mario.Position = new Vec3(0, 0, 0);
@@ -217,14 +213,22 @@ public sealed class SM64World(OnixSM64Config pluginConfig) : IDisposable {
 		Vec3 marioPos = SM64Utils.ConvertFromSM64(Mario!.Position);
 		_collisionWorld.AddSafetyFloor(marioPos with { Y = marioPos.Y - 5f });
 
+		List<Vec3> stairPositions = [];
+
+		foreach (StairBlock block in snapshot.StairBlocks) {
+			Vector3 worldCenter = SM64CollisionWorld.ToVector3(block.Position.Center);
+			Vector3 localCenter = worldCenter - _worldOffset;
+
+			stairPositions.Add(block.Position.Center.Floor());
+			_collisionWorld.AddWedge(localCenter, Vector3.One, block.Rotation);
+		}
+
 		foreach (BoundingBox box in snapshot.NearbyCollisions) {
+			if (stairPositions.Contains(box.Center.Floor())) continue;
+			
 			Vector3 worldCenter = SM64CollisionWorld.ToVector3(box.Center);
 			Vector3 localCenter = worldCenter - _worldOffset;
 			Vector3 size = SM64CollisionWorld.ToVector3(box.Size);
-
-			if (size.X < 0.1f) size.X = 1f;
-			if (size.Y < 0.1f) size.Y = 1f;
-			if (size.Z < 0.1f) size.Z = 1f;
 
 			_collisionWorld.AddCube(localCenter, size);
 		}
@@ -291,7 +295,12 @@ public sealed class SM64World(OnixSM64Config pluginConfig) : IDisposable {
 	private void OnWorldRender(RendererWorld gfx, float delta) {
 		if (!Loaded || !Enabled) return;
 		if (Onix.LocalPlayer == null) return;
-		if (Onix.Region == null) return;
+
+		if (Onix.LocalPlayer.PermissionLevel != PlayerPermissionLevel.Operator) {
+			EnabledFromPlugin = false;
+			Disable();
+			throw new Exception("You must be Operator to use this plugin!");
+		}
 
 		PlayerSnapshot playerSnap = new() {
 			RawHeadRotDegrees = Onix.LocalPlayer.RawHeadRot,

@@ -29,6 +29,16 @@ public sealed class SM64CollisionWorld {
 	) {
 		SM64CollisionUtils.AddCubeSafe(_currentBuilder, center, size, surfaceType, terrainType);
 	}
+	
+	public void AddWedge(
+		Vector3 center,
+		Vector3 size,
+		int rotation = 0,
+		Sm64SurfaceType surfaceType = Sm64SurfaceType.SURFACE_DEFAULT,
+		Sm64TerrainType terrainType = Sm64TerrainType.TERRAIN_GRASS
+	) {
+		SM64CollisionUtils.AddWedgeSafe(_currentBuilder, center, size, rotation, surfaceType, terrainType);
+	}
 
 	public void AddQuad(
 		Vector3 v0,

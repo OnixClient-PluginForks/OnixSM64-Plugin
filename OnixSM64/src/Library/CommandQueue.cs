@@ -11,8 +11,7 @@ public class CommandQueue {
 	public void QueueCommand(string command) {
 		_commands.Enqueue(command);
 	}
-
-	// Must only be called from the render/main thread.
+	
 	public void AdvanceQueue() {
 		int remaining = BatchAmount;
 
