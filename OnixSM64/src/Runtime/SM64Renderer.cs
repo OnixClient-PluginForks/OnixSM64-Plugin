@@ -15,7 +15,7 @@ public class SM64Renderer(ISm64Context context, OnixSM64Config pluginConfig) {
 
     private int _vertexCount;
     private bool _marioTexUploaded;
-    private uint[] _cachedVertexColors;
+    private uint[] _cachedVertexColors = [];
 
     private static byte[] ImageToRgba8(Image<Rgba32> image) {
         int width = image.Width;
