@@ -104,33 +104,41 @@ public sealed class SM64World(OnixSM64Config pluginConfig) : IDisposable {
 		long prevTicks = Stopwatch.GetTimestamp();
 
 		while (!Disposed) {
-			if (!Enabled) continue;
-
-			long nowTicks = Stopwatch.GetTimestamp();
-			double elapsed = (double)(nowTicks - prevTicks) / Stopwatch.Frequency;
-
-			prevTicks = nowTicks;
-
-			if (elapsed > 0.1) elapsed = 0.1;
-
-			accumulator += elapsed;
-
-			// Why does it work? Because... fuck you that's why.
-			while (accumulator >= Constants.FIXED_TIME_STEP) {
-				FixedUpdate();
-				accumulator -= Constants.FIXED_TIME_STEP;
+			if (!Enabled) {
+				Thread.Sleep(16);
+				continue;
 			}
 
-			double timeUntilNext = Constants.FIXED_TIME_STEP - accumulator;
+			try {
+				long nowTicks = Stopwatch.GetTimestamp();
+				double elapsed = (double)(nowTicks - prevTicks) / Stopwatch.Frequency;
 
-			if (timeUntilNext > 0.001) {
-				Thread.Sleep((int)(timeUntilNext * 1000.0));
+				prevTicks = nowTicks;
+
+				if (elapsed > 0.1) elapsed = 0.1;
+
+				accumulator += elapsed;
+
+				// Why does it work? Because... fuck you that's why.
+				while (accumulator >= Constants.FIXED_TIME_STEP) {
+					FixedUpdate();
+					accumulator -= Constants.FIXED_TIME_STEP;
+				}
+
+				double timeUntilNext = Constants.FIXED_TIME_STEP - accumulator;
+
+				if (timeUntilNext > 0.001) {
+					Thread.Sleep((int)(timeUntilNext * 1000.0));
+				}
+			} catch (Exception ex) {
+				Console.WriteLine(ex);
+				throw;
 			}
 		}
 	}
 
 	private void FixedUpdate() {
-		if (!Loaded) return;
+		if (!Loaded || Mario == null) return;
 
 		lock (_simLock) {
 			if (_pendingReset) {
@@ -138,17 +146,19 @@ public sealed class SM64World(OnixSM64Config pluginConfig) : IDisposable {
 				_pendingReset = false;
 			}
 
-			UpdateCollision(_latestWorldSnapshot);
-			UpdateWorldElements(_latestWorldSnapshot);
+			if (_latestWorldSnapshot.NearbyCollisions != null!) {
+				UpdateCollision(_latestWorldSnapshot);
+				UpdateWorldElements(_latestWorldSnapshot);
+			}
 
 			InputEvents events = default;
 
 			if (Input!.IsControlling) {
-				events = Input.UpdateInput(Mario!);
-				events.CameraCommand = Input.BuildCameraCommand(Mario!, _worldOffset);
+				events = Input.UpdateInput(Mario);
+				events.CameraCommand = Input.BuildCameraCommand(Mario, _worldOffset);
 
 				if (events.PunchFired) {
-					(Vec3 lookFrom, Vec3 lookTo, Vec3 ep1, Vec3 ep2) = Input.BuildPunchVectors(Mario!, _worldOffset);
+					(Vec3 lookFrom, Vec3 lookTo, Vec3 ep1, Vec3 ep2) = Input.BuildPunchVectors(Mario, _worldOffset);
 
 					events.PunchLookFrom = lookFrom;
 					events.PunchLookTo = lookTo;
@@ -157,7 +167,7 @@ public sealed class SM64World(OnixSM64Config pluginConfig) : IDisposable {
 				}
 
 				if (events.GroundPoundFired) {
-					Vec3 marioPos = SM64Utils.ConvertFromSM64(Mario!.Position);
+					Vec3 marioPos = SM64Utils.ConvertFromSM64(Mario.Position);
 					events.GroundPoundWorldPos = marioPos + SM64Utils.ToVec3(_worldOffset);
 				}
 			}
@@ -240,65 +250,70 @@ public sealed class SM64World(OnixSM64Config pluginConfig) : IDisposable {
 
 	private bool OnInput(InputKey key, bool isDown) {
 		if (!Loaded || !Enabled) return false;
+		
+		try {
+			lock (_simLock) {
+				if (!_inHud) {
+					Input!.State = new MarioInputState();
+				}
 
-		lock (_simLock) {
-			if (!_inHud) {
-				Input!.State = new MarioInputState();
+				if (Input!.IsControlling && _inHud) {
+					if (key == InputKey.Type.W) {
+						Input.State.Forward = isDown;
+						return isDown;
+					}
+
+					if (key == InputKey.Type.A) {
+						Input.State.Left = isDown;
+						return isDown;
+					}
+
+					if (key == InputKey.Type.S) {
+						Input.State.Backward = isDown;
+						return isDown;
+					}
+
+					if (key == InputKey.Type.D) {
+						Input.State.Right = isDown;
+						return isDown;
+					}
+
+					if (key == Config.MarioJumpKey) {
+						Input.State.AButton = isDown;
+						return isDown;
+					}
+
+					if (key == Config.MarioPunchKey) {
+						Input.State.BButton = isDown;
+						return isDown;
+					}
+
+					if (key == Config.MarioCrouchKey) {
+						Input.State.ZButton = isDown;
+						return isDown;
+					}
+				}
+
+				if (key == Config.MarioToggleKey && isDown) {
+					Input!.State = new MarioInputState();
+					Input.UpdateInput(Mario!);
+					Input.IsControlling = !Input.IsControlling;
+
+					return true;
+				}
+
+				if (key == Config.MarioTeleportKey && isDown) {
+					Vec3 playerPos = Onix.LocalPlayer!.Position;
+
+					_pendingResetWorldOffset = new Vector3(playerPos.X, playerPos.Y, playerPos.Z);
+					_pendingReset = true;
+
+					return true;
+				}
 			}
-
-			if (Input!.IsControlling && _inHud) {
-				if (key == InputKey.Type.W) {
-					Input.State.Forward = isDown;
-					return isDown;
-				}
-
-				if (key == InputKey.Type.A) {
-					Input.State.Left = isDown;
-					return isDown;
-				}
-
-				if (key == InputKey.Type.S) {
-					Input.State.Backward = isDown;
-					return isDown;
-				}
-
-				if (key == InputKey.Type.D) {
-					Input.State.Right = isDown;
-					return isDown;
-				}
-
-				if (key == Config.MarioJumpKey) {
-					Input.State.AButton = isDown;
-					return isDown;
-				}
-
-				if (key == Config.MarioPunchKey) {
-					Input.State.BButton = isDown;
-					return isDown;
-				}
-
-				if (key == Config.MarioCrouchKey) {
-					Input.State.ZButton = isDown;
-					return isDown;
-				}
-			}
-
-			if (key == Config.MarioToggleKey && isDown) {
-				Input!.State = new MarioInputState();
-				Input.UpdateInput(Mario!);
-				Input.IsControlling = !Input.IsControlling;
-
-				return true;
-			}
-
-			if (key == Config.MarioTeleportKey && isDown) {
-				Vec3 playerPos = Onix.LocalPlayer!.Position;
-
-				_pendingResetWorldOffset = new Vector3(playerPos.X, playerPos.Y, playerPos.Z);
-				_pendingReset = true;
-
-				return true;
-			}
+		} catch (Exception ex) {
+			Console.WriteLine(ex);
+			return false;
 		}
 
 		return false;
@@ -318,65 +333,69 @@ public sealed class SM64World(OnixSM64Config pluginConfig) : IDisposable {
 			throw new Exception("You must be Operator to use this plugin!");
 		}
 
-		PlayerSnapshot playerSnap = new() {
-			Yaw = Onix.LocalPlayer.RawHeadRot,
-			Pitch = Onix.LocalPlayer.Rotation.Pitch
-		};
+		try {
+			PlayerSnapshot playerSnap = new() {
+				Yaw = Onix.LocalPlayer.RawHeadRot,
+				Pitch = Onix.LocalPlayer.Rotation.Pitch
+			};
 
-		MarioRenderSnapshot renderSnap = _renderSnapshot;
+			MarioRenderSnapshot renderSnap;
 
-		InputEvents events;
-		bool isControlling;
+			InputEvents events;
+			bool isControlling;
 
-		lock (_simLock) {
-			Input!.LatestPlayerSnapshot = playerSnap;
-
-			events = _pendingInputEvents;
-			_pendingInputEvents = default;
-
-			isControlling = Input.IsControlling;
-		}
-
-		if (isControlling) {
-			Commands!.DisablePlayerInput();
-
-			if (events.CameraCommand != null) {
-				Commands.EnqueueCameraCommand(events.CameraCommand);
+			lock (_simLock) {
+				Input!.LatestPlayerSnapshot = playerSnap;
+				events = _pendingInputEvents;
+				_pendingInputEvents = default;
+				isControlling = Input.IsControlling;
+				renderSnap = _renderSnapshot;
 			}
 
-			if (events.PunchFired) {
-				Commands.HandlePunch(
-					events.PunchLookFrom,
-					events.PunchLookTo,
-					events.PunchEntityPos1,
-					events.PunchEntityPos2
-				);
+			if (isControlling) {
+				Commands!.DisablePlayerInput();
+
+				if (events.CameraCommand != null) {
+					Commands.EnqueueCameraCommand(events.CameraCommand);
+				}
+
+				if (events.PunchFired) {
+					Commands.HandlePunch(
+						events.PunchLookFrom,
+						events.PunchLookTo,
+						events.PunchEntityPos1,
+						events.PunchEntityPos2
+					);
+				}
+
+				if (events.GroundPoundFired) {
+					Commands.HandleGroundPound(events.GroundPoundWorldPos);
+				}
+			} else {
+				Commands!.ResetCamera();
 			}
 
-			if (events.GroundPoundFired) {
-				Commands.HandleGroundPound(events.GroundPoundWorldPos);
+			WorldSnapshot worldSnap = SM64Utils.CaptureWorldSnapshot(
+				renderSnap.MarioWorldPos,
+				renderSnap.WorldOffset
+			);
+
+			lock (_simLock) {
+				_latestWorldSnapshot = worldSnap;
 			}
-		} else {
-			Commands!.ResetCamera();
+
+			_inHud = Onix.Gui.MouseGrabbed;
+
+			if (renderSnap.Mesh != null && renderSnap.Mesh?.TriangleData != null) {
+				gfx.SetMaterialParameters(new GameMaterialParameters { Light = true, Blending = true });
+				Renderer!.RenderMarioMesh(gfx, renderSnap.Mesh, renderSnap.WorldOffset);
+			}
+
+			Commands!.Flush();
+		} catch (Exception ex) {
+			Console.WriteLine(ex);
+			throw;
 		}
-
-		WorldSnapshot worldSnap = SM64Utils.CaptureWorldSnapshot(
-			renderSnap.MarioWorldPos,
-			renderSnap.WorldOffset
-		);
-
-		lock (_simLock) {
-			_latestWorldSnapshot = worldSnap;
-		}
-
-		_inHud = Onix.Gui.MouseGrabbed;
-
-		if (renderSnap.Mesh?.TriangleData != null) {
-			gfx.SetMaterialParameters(new GameMaterialParameters { Light = true, Blending = true });
-			Renderer!.RenderMarioMesh(gfx, renderSnap.Mesh, renderSnap.WorldOffset);
-		}
-
-		Commands!.Flush();
 	}
 
 	public void Dispose() {

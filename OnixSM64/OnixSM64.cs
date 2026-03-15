@@ -1,3 +1,4 @@
+using OnixRuntime.Api;
 using OnixRuntime.Plugin;
 using OnixSM64.Runtime;
 
@@ -13,7 +14,7 @@ namespace OnixSM64 {
 			base.DisablingShouldUnloadPlugin = false;
 			
 			#if DEBUG
-			//base.WaitForDebuggerToBeAttached();
+			base.WaitForDebuggerToBeAttached();
 			#endif
 		}
 
