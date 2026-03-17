@@ -14,7 +14,7 @@ namespace OnixSM64 {
 			base.DisablingShouldUnloadPlugin = false;
 			
 			#if DEBUG
-			base.WaitForDebuggerToBeAttached();
+			//base.WaitForDebuggerToBeAttached();
 			#endif
 		}
 
